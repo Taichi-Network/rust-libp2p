@@ -2686,6 +2686,80 @@ where
         }
     }
 
+    pub fn forward_msg_to_peers(
+        &mut self,
+        topic: impl Into<TopicHash>,
+        data: impl Into<Vec<u8>>,
+        peers: Vec<PeerId>,
+    ) -> Result<bool, PublishError> {
+        let data = data.into();
+        let topic = topic.into();
+
+        // Transform the data before building a raw_message.
+        let transformed_data = self
+            .data_transform
+            .outbound_transform(&topic, data.clone())?;
+
+        let raw_message = self.build_raw_message(topic, transformed_data)?;
+
+        // calculate the message id from the un-transformed data
+        let msg_id = self.config.message_id(&GossipsubMessage {
+            source: raw_message.source,
+            data, // the uncompressed form
+            sequence_number: raw_message.sequence_number,
+            topic: raw_message.topic.clone(),
+        });
+
+        let event = GossipsubRpc {
+            subscriptions: Vec::new(),
+            messages: vec![raw_message.clone()],
+            control_msgs: Vec::new(),
+        }
+        .into_protobuf();
+
+        // check that the size doesn't exceed the max transmission size
+        if event.encoded_len() > self.config.max_transmit_size() {
+            return Err(PublishError::MessageTooLarge);
+        }
+
+        trace!("Publishing message: {:?}", msg_id);
+
+        let mut recipient_peers = HashSet::new();
+
+        {
+            // Populate the recipient peers mapping
+
+            // Add peers
+            for peer_id in peers {
+                if let Some(topics) = self.peer_topics.get(&peer_id) {
+                    if Some(&peer_id) != raw_message.source.as_ref()
+                        && topics.contains(&raw_message.topic)
+                    {
+                        recipient_peers.insert(peer_id);
+                    }
+                }
+            }
+        }
+
+        // forward the message to peers
+        if !recipient_peers.is_empty() {
+            let msg_bytes = event.encoded_len();
+            for peer in recipient_peers.iter() {
+                debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
+                self.send_message(*peer, event.clone())?;
+                if let Some(m) = self.metrics.as_mut() {
+                    m.msg_sent(&raw_message.topic, msg_bytes);
+                }
+            }
+            debug!("Completed forwarding message");
+            self.duplicate_cache.insert(msg_id.clone());
+            self.mcache.put(&msg_id, raw_message);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     /// Helper function which forwards a message to mesh\[topic\] peers.
     ///
     /// Returns true if at least one peer was messaged.
