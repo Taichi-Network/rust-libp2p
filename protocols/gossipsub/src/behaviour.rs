@@ -2691,6 +2691,7 @@ where
         topic: impl Into<TopicHash>,
         data: impl Into<Vec<u8>>,
         peers: Vec<PeerId>,
+        add_to_cache: bool,
     ) -> Result<bool, PublishError> {
         let data = data.into();
         let topic = topic.into();
@@ -2752,8 +2753,10 @@ where
                 }
             }
             debug!("Completed forwarding message");
-            self.duplicate_cache.insert(msg_id.clone());
-            self.mcache.put(&msg_id, raw_message);
+            if add_to_cache {
+                self.mcache.put(&msg_id, raw_message);
+                self.duplicate_cache.insert(msg_id.clone());
+            }
             Ok(true)
         } else {
             Ok(false)
