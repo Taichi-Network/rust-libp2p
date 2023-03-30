@@ -31,7 +31,7 @@ use std::{
 };
 
 use futures::StreamExt;
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
@@ -2746,7 +2746,7 @@ where
         if !recipient_peers.is_empty() {
             let msg_bytes = event.encoded_len();
             for peer in recipient_peers.iter() {
-                debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
+                info!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.send_message(*peer, event.clone())?;
                 if let Some(m) = self.metrics.as_mut() {
                     m.msg_sent(&raw_message.topic, msg_bytes);
@@ -2759,7 +2759,7 @@ where
             }
             Ok(true)
         } else {
-            Ok(false)
+            Err(PublishError::InsufficientPeers)
         }
     }
 
