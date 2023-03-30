@@ -31,7 +31,7 @@ use std::{
 };
 
 use futures::StreamExt;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
@@ -2692,7 +2692,7 @@ where
         data: impl Into<Vec<u8>>,
         peers: Vec<PeerId>,
         add_to_cache: bool,
-    ) -> Result<bool, PublishError> {
+    ) -> Result<Vec<PeerId>, PublishError> {
         let data = data.into();
         let topic = topic.into();
 
@@ -2743,11 +2743,13 @@ where
         }
 
         // forward the message to peers
+        let mut broadcasted_peers = vec![];
         if !recipient_peers.is_empty() {
             let msg_bytes = event.encoded_len();
             for peer in recipient_peers.iter() {
-                info!("Sending message: {:?} to peer {:?}", msg_id, peer);
+                debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.send_message(*peer, event.clone())?;
+                broadcasted_peers.push(*peer);
                 if let Some(m) = self.metrics.as_mut() {
                     m.msg_sent(&raw_message.topic, msg_bytes);
                 }
@@ -2757,7 +2759,7 @@ where
                 self.mcache.put(&msg_id, raw_message);
                 self.duplicate_cache.insert(msg_id.clone());
             }
-            Ok(true)
+            Ok(broadcasted_peers)
         } else {
             Err(PublishError::InsufficientPeers)
         }
