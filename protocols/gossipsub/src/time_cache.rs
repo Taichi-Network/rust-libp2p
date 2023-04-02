@@ -208,8 +208,25 @@ where
         }
     }
 
+    pub fn insert_with_update(&mut self, key: Key) -> bool {
+        match self.0.entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(());
+                true
+            }
+            Entry::Occupied(mut entry) => {
+                entry.insert_and_update_expiration(());
+                false
+            }
+        }
+    }
+
     pub fn contains(&self, key: &Key) -> bool {
         self.0.contains_key(key)
+    }
+
+    pub fn get_key_count(&self) -> usize {
+        self.0.map.keys().count()
     }
 }
 
