@@ -149,6 +149,7 @@ mod mcache;
 pub mod metrics;
 mod peer_score;
 pub mod subscription_filter;
+pub mod taichi_metrics;
 pub mod time_cache;
 mod topic;
 mod transform;

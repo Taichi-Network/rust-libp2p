@@ -48,7 +48,6 @@ use libp2p_swarm::{
 };
 use wasm_timer::Instant;
 
-use crate::backoff::BackoffStorage;
 use crate::config::{GossipsubConfig, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
@@ -66,6 +65,7 @@ use crate::types::{
     GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
+use crate::{backoff::BackoffStorage, taichi_metrics::TaichiMetrics};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
@@ -316,6 +316,8 @@ pub struct Gossipsub<
 
     /// Keep track of a set of internal metrics relating to gossipsub.
     metrics: Option<Metrics>,
+
+    taichi_metrics: Option<TaichiMetrics>,
 }
 
 impl<D, F> Gossipsub<D, F>
@@ -424,6 +426,7 @@ where
         validate_config(&privacy, config.validation_mode())?;
 
         Ok(Gossipsub {
+            taichi_metrics: Some(TaichiMetrics::new()),
             metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
@@ -460,6 +463,10 @@ where
             subscription_filter,
             data_transform,
         })
+    }
+
+    pub fn get_taichi_metrics(&self) -> Option<&TaichiMetrics> {
+        self.taichi_metrics.as_ref()
     }
 }
 
@@ -1736,6 +1743,10 @@ where
         // Record the received metric
         if let Some(metrics) = self.metrics.as_mut() {
             metrics.msg_recvd_unfiltered(&raw_message.topic, raw_message.raw_protobuf_len());
+        }
+
+        if let Some(taichi_metrics) = self.taichi_metrics.as_ref() {
+            taichi_metrics.add_topic_recv_peer(&raw_message.topic, propagation_source);
         }
 
         let fast_message_id = self.config.fast_message_id(&raw_message);
