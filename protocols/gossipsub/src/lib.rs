@@ -156,6 +156,8 @@ mod topic;
 mod transform;
 mod types;
 
+pub mod generated;
+
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
 pub use self::error::{PublishError, SubscriptionError, ValidationError};
